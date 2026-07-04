@@ -4,6 +4,9 @@ A production-style Voice AI assistant for insurance claim support, built for the
 
 The agent can authenticate callers, retrieve claim status, answer claims-related FAQs using Gemini-powered RAG, escalate to a human representative, and log post-call interaction records.
 
+<img width="1510" height="812" alt="Screenshot 2026-07-05 at 1 05 05 AM" src="https://github.com/user-attachments/assets/d09cfefc-80d0-45b9-9a1a-d9db93769607" />
+
+
 ---
 
 ## Live Demo
@@ -28,8 +31,8 @@ Caller asks for claim status
 → Post-call logging
 ```
 
-<!-- Add screenshot here after saving it as docs/screenshots/vapi-call-transcript.png -->
-<!-- ![End-to-End Voice Call](docs/screenshots/vapi-call-transcript.png) -->
+<img width="1509" height="859" alt="Screenshot 2026-07-05 at 1 10 21 AM" src="https://github.com/user-attachments/assets/eff46a9b-7ebc-47d0-83c5-b0bef0e0d7f3" />
+
 
 ---
 
@@ -90,6 +93,8 @@ flowchart TD
 
 <!-- Add screenshot here after saving it as docs/screenshots/vapi-tools.png -->
 <!-- ![Vapi Tools](docs/screenshots/vapi-tools.png) -->
+<img width="1509" height="684" alt="Screenshot 2026-07-05 at 1 05 29 AM" src="https://github.com/user-attachments/assets/21d6d7a0-d73e-4f81-8fe0-7da98dbcbeb2" />
+
 
 ---
 
@@ -172,6 +177,8 @@ Google Sheets is used as a lightweight external system with four tabs:
 
 <!-- Add screenshot here after saving it as docs/screenshots/google-sheets-data-model.png -->
 <!-- ![Google Sheets Data Model](docs/screenshots/google-sheets-data-model.png) -->
+<img width="847" height="151" alt="Screenshot 2026-07-05 at 1 05 45 AM" src="https://github.com/user-attachments/assets/cd0b96bc-7fff-4b13-a360-81bc304fac2b" />
+
 
 ---
 
