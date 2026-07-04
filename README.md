@@ -1,245 +1,150 @@
 # VoiceAI Claims Support Agent
 
-A production-style Voice AI insurance claims assistant built for the Observe.AI AI Agent Engineer take-home assessment.
+A production-style Voice AI assistant for insurance claim support, built for the Observe.AI AI Agent Engineer take-home assessment.
 
-The assistant handles inbound customer calls for insurance claim support. It can authenticate callers, retrieve claim status from an external system, answer general claims FAQs using Gemini-powered RAG, escalate to a human representative, and write post-call records back to an external system.
+The agent can authenticate callers, retrieve claim status, answer claims-related FAQs using Gemini-powered RAG, escalate to a human representative, and log post-call interaction records.
 
 ---
 
 ## Live Demo
 
-**Backend URL:**  
-https://voiceai-claims-support-agent.onrender.com
-
-**Health Check:**  
-https://voiceai-claims-support-agent.onrender.com/health
-
-**Voice Agent Platform:** Vapi
+**Backend:** https://voiceai-claims-support-agent.onrender.com  
+**Health Check:** https://voiceai-claims-support-agent.onrender.com/health  
+**Voice Platform:** Vapi
 
 ---
 
-## What This Agent Does
+## Demo
 
-The VoiceAI agent, Ava, supports:
+The assistant supports an end-to-end claim status flow:
 
-- Greeting inbound callers
-- Collecting phone number
-- Looking up customers from Google Sheets
-- Verifying identity using date of birth
-- Retrieving claim status after authentication
-- Explaining required documents and next steps
-- Answering general claims FAQs using RAG
-- Handling unsupported questions safely
-- Escalating to a human representative
-- Logging post-call interaction records
+```text
+Caller asks for claim status
+→ Agent collects phone number
+→ Customer lookup
+→ DOB verification
+→ Claim status retrieval
+→ FAQ handling if needed
+→ Post-call logging
+```
 
-This project is designed as a practical AI agent workflow, not just a chatbot.
+<!-- Add screenshot here after saving it as docs/screenshots/vapi-call-transcript.png -->
+<!-- ![End-to-End Voice Call](docs/screenshots/vapi-call-transcript.png) -->
+
+---
+
+## Features
+
+- Voice-based inbound claims support
+- Customer lookup using phone number
+- Identity verification using DOB
+- Claim status retrieval from an external system
+- Gemini-powered RAG for general claims FAQs
+- Human representative escalation
+- Post-call logging to Google Sheets
+- Deployed backend with structured API tools
 
 ---
 
 ## Architecture
 
-mermaid
+```mermaid
 flowchart TD
     A[Caller] --> B[Vapi Voice Agent]
-    B --> C[Tool Call]
-    C --> D[Node.js Express Backend]
-    D --> E[Google Sheets: Customers]
-    D --> F[Google Sheets: Claims]
-    D --> G[Google Sheets: Knowledge Base]
-    D --> H[Google Sheets: Call Logs]
-    D --> I[Gemini Embeddings + Generation]
-    I --> D
-    D --> B
+    B --> C[Node.js Express Backend]
+    C --> D[Google Sheets: Customers]
+    C --> E[Google Sheets: Claims]
+    C --> F[Google Sheets: Knowledge Base]
+    C --> G[Google Sheets: Call Logs]
+    C --> H[Gemini API]
+    H --> C
+    C --> B
     B --> A
+```
 
-The backend acts as a stateless integration layer. Vapi manages the voice conversation and tool calling, while the backend handles customer lookup, verification, claim retrieval, RAG search, escalation, and call logging.
+---
 
-Tech Stack
-Layer	Technology
-Voice Agent	Vapi
-Backend	Node.js, Express.js
-Validation	Zod
-External System	Google Sheets
-RAG / LLM	Gemini API
-Deployment	Render
-Testing	Thunder Client, Custom API Test Script
-Key Design Decisions
-1. Stateful voice workflow, stateless backend
+## Tech Stack
 
-The voice agent maintains conversational state such as phone number, authentication status, customer ID, claim ID, and outcome.
+| Area | Stack |
+|---|---|
+| Voice Agent | Vapi |
+| Backend | Node.js, Express.js |
+| Validation | Zod |
+| Database / External System | Google Sheets |
+| RAG / LLM | Gemini API |
+| Deployment | Render |
 
-The backend remains stateless and exposes deterministic tools. Each API receives the required input and returns structured JSON.
+---
 
-2. Authentication before claim disclosure
+## Vapi Tools
 
-Customer lookup and identity verification are intentionally separated.
+| Tool | Purpose |
+|---|---|
+| `lookup_customer` | Finds customer by phone number |
+| `verify_customer` | Verifies caller identity using phone + DOB |
+| `get_claim_status` | Retrieves claim details after authentication |
+| `knowledge_search` | Answers general FAQs using Gemini RAG |
+| `escalate` | Creates a human representative escalation |
+| `log_call` | Saves post-call interaction summary |
 
-lookup_customer only confirms whether a customer exists. It does not return claim details. Claim status is only retrieved after successful DOB-based verification.
+<!-- Add screenshot here after saving it as docs/screenshots/vapi-tools.png -->
+<!-- ![Vapi Tools](docs/screenshots/vapi-tools.png) -->
 
-3. Claim data is not generated by the LLM
+---
 
-Claim-specific information always comes from the claims sheet through the get_claim_status tool.
+## Main API Endpoints
 
-The LLM is not allowed to invent claim status, timelines, required documents, or customer information.
+### `GET /health`
 
-4. RAG is used only for general claims FAQs
+Checks backend, Google Sheets, and LLM configuration.
 
-General questions like office hours, mailing address, document submission, and claims process are handled through the knowledge base using Gemini-powered RAG.
+### `POST /lookup-customer`
 
-Claim status and customer-specific data are kept separate from RAG.
-
-5. Tool boundaries are explicit
-
-The agent has separate tools for lookup, verification, claim retrieval, knowledge search, escalation, and logging. This makes the system easier to test, debug, and explain.
-
-Voice Agent Workflow
-Happy Path
-Caller asks for claim status
-↓
-Agent asks for phone number
-↓
-lookup_customer
-↓
-Agent asks for DOB
-↓
-verify_customer
-↓
-get_claim_status
-↓
-Agent explains claim status and next step
-↓
-log_call
-↓
-Call ends
-FAQ Flow
-Caller asks general claims question
-↓
-knowledge_search
-↓
-Gemini RAG retrieves relevant knowledge base chunk
-↓
-Agent gives short grounded answer
-↓
-log_call
-Escalation Flow
-Caller asks for representative
-↓
-escalate
-↓
-Agent confirms representative escalation
-↓
-log_call
-Backend API Endpoints
-Health
-GET /health
-
-Returns backend status and confirms whether Google Sheets and LLM configuration are available.
-
-Customer Lookup
-POST /lookup-customer
-
-Request:
-
+```json
 {
   "phone": "9876543210"
 }
+```
 
-Response:
+### `POST /verify-customer`
 
-{
-  "found": true,
-  "customer_id": "CUST001",
-  "name": "Rahul Sharma",
-  "masked_phone": "******3210",
-  "message": "Customer found. Please verify identity before sharing claim details."
-}
-Customer Verification
-POST /verify-customer
-
-Request:
-
+```json
 {
   "phone": "9876543210",
   "dob": "1994-05-12"
 }
+```
 
-Response:
+### `POST /get-claim-status`
 
-{
-  "authenticated": true,
-  "customer_id": "CUST001",
-  "name": "Rahul Sharma",
-  "message": "Customer identity verified."
-}
-Claim Status
-POST /get-claim-status
-
-Request:
-
+```json
 {
   "customer_id": "CUST001"
 }
+```
 
-Response:
+### `POST /knowledge-search`
 
-{
-  "found": true,
-  "claim_id": "CLM1001",
-  "customer_id": "CUST001",
-  "claim_type": "Auto Accident",
-  "status": "Approved",
-  "last_updated": "2026-07-01",
-  "required_documents": "None",
-  "next_step": "Payment will be processed within 3 to 5 business days.",
-  "message": "Claim status retrieved successfully."
-}
-Knowledge Search
-POST /knowledge-search
-
-Request:
-
+```json
 {
   "query": "How do I submit missing documents?"
 }
+```
 
-Response:
+### `POST /escalate`
 
-{
-  "found": true,
-  "answer": "You can submit missing documents through the customer portal or by emailing them to claims-support@observeinsurance.example",
-  "sources": [
-    {
-      "doc_id": "KB005",
-      "title": "Submitting Missing Documents",
-      "category": "documents",
-      "score": 0.84
-    }
-  ],
-  "retrieval_mode": "gemini_rag"
-}
-Escalation
-POST /escalate
-
-Request:
-
+```json
 {
   "customer_id": "CUST001",
   "phone": "9876543210",
   "reason": "Caller requested a human representative."
 }
+```
 
-Response:
+### `POST /log-call`
 
-{
-  "escalated": true,
-  "message": "Representative escalation has been created for the customer."
-}
-Log Call
-POST /log-call
-
-Request:
-
+```json
 {
   "caller_name": "Rahul Sharma",
   "phone": "9876543210",
@@ -250,200 +155,88 @@ Request:
   "outcome": "claim_status_shared",
   "escalated": false
 }
+```
 
-Response:
+---
 
-{
-  "logged": true,
-  "message": "Post-call interaction record saved successfully."
-}
-External System Design
+## External System
 
-Google Sheets is used as a lightweight external system for the assignment.
+Google Sheets is used as a lightweight external system with four tabs:
 
-It contains four tabs:
+| Sheet | Purpose |
+|---|---|
+| `customers` | Customer profile and verification data |
+| `claims` | Claim status, documents, and next steps |
+| `knowledge_base` | FAQ content for RAG |
+| `call_logs` | Post-call interaction records |
 
-Sheet	Purpose
-customers	Stores customer identity and policy metadata
-claims	Stores claim status, documents, and next steps
-knowledge_base	Stores general claims FAQ and process information
-call_logs	Stores post-call interaction records
+<!-- Add screenshot here after saving it as docs/screenshots/google-sheets-data-model.png -->
+<!-- ![Google Sheets Data Model](docs/screenshots/google-sheets-data-model.png) -->
 
-In production, this layer could be replaced with Salesforce, Zendesk, PostgreSQL, or an internal claims system.
+---
 
-RAG Implementation
+## Demo Test Data
 
-The knowledge search tool uses Gemini-powered RAG.
+### Happy Path
 
-Flow:
-
-knowledge_base sheet
-↓
-row as document chunk
-↓
-Gemini embedding
-↓
-in-memory vector cache
-↓
-query embedding
-↓
-cosine similarity
-↓
-top 2 chunks
-↓
-Gemini grounded answer generation
-
-The agent only uses RAG for general claims knowledge. Claim-specific information always comes from structured claim records.
-
-Demo Scenarios
-1. Happy Path
-
-Use:
-
+```text
 Phone: 9876543210
 DOB: 1994-05-12
+```
 
-Expected behavior:
+Expected result: customer is verified, approved claim status is shared, and call is logged.
 
-Customer found
-Identity verified
-Claim status retrieved
-Approved claim status explained
-Call logged
-2. Documents Required
+### Documents Required
 
-Use:
-
+```text
 Phone: 9876543211
 DOB: 1991-11-20
+```
 
-Expected behavior:
+Expected result: customer is verified, required documents are explained, and call is logged.
 
-Customer found
-Identity verified
-Claim status retrieved
-Required documents explained
-Call logged
-3. Authentication Failure
+### Authentication Failure
 
-Use:
-
+```text
 Phone: 9876543210
 DOB: 1990-01-01
+```
 
-Expected behavior:
+Expected result: claim details are not shared and representative support is offered.
 
-Customer found
-Verification fails
-Agent does not reveal claim details
-Agent offers representative support
-Call logged
-4. Customer Not Found
+### FAQ
 
-Use:
-
-Phone: 9999999999
-
-Expected behavior:
-
-Customer not found
-Agent asks caller to confirm the number
-Agent offers representative support
-Call logged
-5. FAQ / RAG
-
-Ask:
-
+```text
 What are your office hours?
+```
 
-Expected behavior:
+Expected result: answer is generated using Gemini RAG from the knowledge base.
 
-Agent calls knowledge search
-Gemini RAG retrieves the Office Hours knowledge base row
-Agent answers using retrieved context
-6. Human Representative Escalation
+---
 
-Say:
+## Security and Reliability
 
-I want to speak to a human representative.
+- Claim details are never shared before identity verification.
+- Customer lookup and claim retrieval are separated.
+- LLM is not used to generate claim-specific data.
+- Claim status always comes from structured records.
+- Environment variables and credentials are not committed.
+- Post-call logging creates an audit trail.
 
-Expected behavior:
+---
 
-Agent calls escalation tool
-Representative escalation is created
-Call logged
-Edge Cases Handled
-Customer not found
-Authentication failure
-Claim not found
-Documents required
-Unsupported questions
-Emergency situations
-Representative request
-Tool/API failure
-RAG no confident answer
-Post-call logging
-Debugging Approach
+## Local Setup
 
-The system is designed to make failures easy to isolate.
-
-Debugging order:
-
-Vapi transcript
-↓
-Tool selected by assistant
-↓
-Tool request payload
-↓
-Backend logs
-↓
-Google Sheets data
-↓
-RAG retrieval sources
-↓
-Final assistant response
-
-Backend logs include:
-
-request path
-status code
-response time
-sanitized request body
-safe debug IDs for failures
-
-Sensitive values like phone numbers are masked in logs.
-
-Security Considerations
-Service account credentials are not committed to GitHub.
-.env is ignored.
-secrets/ is ignored.
-Customer claim details are not shared before DOB verification.
-The agent is instructed not to expose internal tool names, JSON, API errors, source scores, or backend details to the caller.
-Google Sheets access is limited to the specific spreadsheet shared with the service account.
-Production Considerations
-
-If this were productionized, I would improve:
-
-Replace Google Sheets with CRM/database integration
-Use OTP or stronger KBA for identity verification
-Add real human handoff through CCaaS / Twilio / Amazon Connect
-Store call transcripts and tool traces for QA
-Add monitoring and alerting
-Add retry and queue-based logging
-Add structured evaluation sets for prompts and RAG retrieval
-Add vector database such as pgvector, Pinecone, Chroma, or Weaviate
-Add role-based access control and audit logging
-Add automated regression tests for conversation flows
-Local Setup
-1. Clone the repository
+```bash
 git clone https://github.com/N-Aryan/voiceai-claims-support-agent.git
 cd voiceai-claims-support-agent
-2. Install dependencies
 npm install
-3. Configure environment variables
+npm run dev
+```
 
-Create .env:
+Create a `.env` file:
 
+```env
 PORT=3000
 GOOGLE_SHEET_ID=
 GOOGLE_SERVICE_ACCOUNT_EMAIL=
@@ -452,33 +245,28 @@ GEMINI_API_KEY=
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 GEMINI_GENERATION_MODEL=gemini-2.5-flash
 NODE_ENV=development
+```
 
-For local development, the app can also use:
+Run API tests:
 
-secrets/google-service-account.json
-
-Do not commit .env or secrets/.
-
-4. Run locally
-npm run dev
-5. Test APIs
+```bash
 npm run test:api
+```
 
-Expected result:
+---
 
-10 passed, 0 failed
-Deployment
+## Deployment
 
 The backend is deployed on Render.
 
-Render configuration:
-
+```text
 Build Command: npm install
 Start Command: node src/server.js
-Runtime: Node.js
+```
 
-Required Render environment variables:
+Required environment variables:
 
+```text
 GOOGLE_SHEET_ID
 GOOGLE_SERVICE_ACCOUNT_EMAIL
 GOOGLE_PRIVATE_KEY
@@ -486,45 +274,30 @@ GEMINI_API_KEY
 GEMINI_EMBEDDING_MODEL
 GEMINI_GENERATION_MODEL
 NODE_ENV
-Project Structure
-src/
-  config/
-  controllers/
-  middleware/
-  prompts/
-  routes/
-  schemas/
-  scripts/
-  services/
-  utils/
-  app.js
-  server.js
+```
 
-Main folders:
+<!-- Add screenshot here after saving it as docs/screenshots/render-health-check.png -->
+<!-- ![Render Health Check](docs/screenshots/render-health-check.png) -->
 
-Folder	Purpose
-routes	Defines API endpoints
-controllers	Handles HTTP request/response
-services	Contains business logic and integrations
-schemas	Zod request validation
-middleware	Logging, validation, error handling
-utils	Reusable helper functions
-prompts	Vapi system prompt
-Assignment Coverage
-Requirement	Status
-Working VoiceAI Agent	Complete
-Customer lookup integration	Complete
-Claim status integration	Complete
-Post-call writeback integration	Complete
-Happy path flow	Complete
-Authentication failure flow	Complete
-Customer not found flow	Complete
-Representative escalation flow	Complete
-FAQ support	Complete
-Knowledge base / RAG	Complete
-Deployed backend	Complete
-Tool calling	Complete
-Author
+---
 
-Aryan Narang
-GitHub: N-Aryan
+## Assignment Coverage
+
+| Requirement | Status |
+|---|---|
+| VoiceAI agent | Complete |
+| Customer lookup integration | Complete |
+| Claim retrieval integration | Complete |
+| Post-call writeback | Complete |
+| Authentication failure flow | Complete |
+| Customer not found flow | Complete |
+| Escalation flow | Complete |
+| FAQ / knowledge base | Complete |
+| Deployed backend | Complete |
+
+---
+
+## Author
+
+Aryan Narang  
+GitHub: [N-Aryan](https://github.com/N-Aryan)
