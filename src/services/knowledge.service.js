@@ -4,10 +4,16 @@ const { getSheetRows } = require('./sheets.service');
 const { generateEmbedding, generateGroundedAnswer } = require('./gemini.service');
 const { cosineSimilarity } = require('../utils/similarity');
 
-const SIMILARITY_THRESHOLD = 0.7;
+const SIMILARITY_THRESHOLD = 0.76;
+const AMBIGUOUS_SCORE_GAP = 0.05;
 const KNOWLEDGE_CACHE_TTL_MS = 10 * 60 * 1000;
+
 const NO_CONFIDENT_ANSWER =
   'I could not find a confident answer in the claims knowledge base. Please offer representative support.';
+
+const CLAIM_SPECIFIC_QUESTION_ANSWER =
+  'This looks like a claim-specific question. Please authenticate the caller and use the claim status flow instead of the knowledge base.';
+
 const RETRIEVAL_MODE = 'gemini_rag';
 
 const knowledgeCache = {
@@ -21,6 +27,34 @@ function buildKnowledgeText(row) {
 
 function buildDocumentSignature(text) {
   return createHash('sha1').update(text).digest('hex');
+}
+
+function isClaimSpecificQuestion(query) {
+  const normalizedQuery = String(query || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const claimSpecificPatterns = [
+    /\bmy claim\b/,
+    /\bclaim status\b/,
+    /\bstatus of my claim\b/,
+    /\bmy documents\b/,
+    /\bmissing documents\b/,
+    /\bdocuments missing\b/,
+    /\bmissing documents.*\bmy claim\b/,
+    /\bdocuments.*\bmy claim\b/,
+    /\bmy claim.*\bdocuments\b/,
+    /\bmy payout\b/,
+    /\bmy payment\b/,
+    /\bmy approval\b/,
+    /\bmy settlement\b/,
+    /\bmy policy\b/,
+    /\bclaim id\b/,
+  ];
+
+  return claimSpecificPatterns.some((pattern) => pattern.test(normalizedQuery));
 }
 
 async function loadKnowledgeDocuments() {
@@ -39,6 +73,7 @@ async function loadKnowledgeDocuments() {
 
   const documents = rows.map((row) => {
     const text = buildKnowledgeText(row);
+    const signature = buildDocumentSignature(text);
 
     return {
       doc_id: row.doc_id,
@@ -46,8 +81,8 @@ async function loadKnowledgeDocuments() {
       category: row.category,
       content: row.content,
       text,
-      signature: buildDocumentSignature(text),
-      embedding: previousEmbeddings.get(buildDocumentSignature(text)) || null,
+      signature,
+      embedding: previousEmbeddings.get(signature) || null,
     };
   });
 
@@ -72,6 +107,19 @@ async function loadKnowledgeDocuments() {
 }
 
 async function searchKnowledgeBase(query) {
+  console.info(`[knowledge] incoming query="${query}"`);
+
+  if (isClaimSpecificQuestion(query)) {
+    console.info('[knowledge] blocked claim-specific question from RAG path');
+
+    return {
+      found: false,
+      answer: CLAIM_SPECIFIC_QUESTION_ANSWER,
+      sources: [],
+      retrieval_mode: RETRIEVAL_MODE,
+    };
+  }
+
   const documents = await loadKnowledgeDocuments();
 
   if (documents.length === 0) {
@@ -92,15 +140,18 @@ async function searchKnowledgeBase(query) {
       score: cosineSimilarity(queryEmbedding, document.embedding),
     }))
     .sort((left, right) => right.score - left.score);
-  const topDocuments = rankedDocuments.slice(0, 2);
 
-  if (topDocuments[0]) {
+  const topDocuments = rankedDocuments.slice(0, 2);
+  const bestDocument = topDocuments[0];
+  const secondBestDocument = topDocuments[1];
+
+  if (bestDocument) {
     console.info(
-      `[knowledge] top source "${topDocuments[0].title}" score=${topDocuments[0].score.toFixed(2)}`,
+      `[knowledge] top source "${bestDocument.title}" score=${bestDocument.score.toFixed(2)}`,
     );
   }
 
-  if (!topDocuments[0] || topDocuments[0].score < SIMILARITY_THRESHOLD) {
+  if (!bestDocument || bestDocument.score < SIMILARITY_THRESHOLD) {
     return {
       found: false,
       answer: NO_CONFIDENT_ANSWER,
@@ -109,10 +160,55 @@ async function searchKnowledgeBase(query) {
     };
   }
 
+  const retrievalIsAmbiguous =
+    secondBestDocument &&
+    bestDocument.score - secondBestDocument.score < AMBIGUOUS_SCORE_GAP &&
+    bestDocument.category !== secondBestDocument.category;
+
+  if (retrievalIsAmbiguous) {
+    console.info(
+      `[knowledge] ambiguous retrieval between "${bestDocument.title}" and "${secondBestDocument.title}"`,
+    );
+
+    return {
+      found: false,
+      answer: NO_CONFIDENT_ANSWER,
+      sources: topDocuments.map((document) => ({
+        doc_id: document.doc_id,
+        title: document.title,
+        category: document.category,
+        score: Number(document.score.toFixed(2)),
+      })),
+      retrieval_mode: RETRIEVAL_MODE,
+    };
+  }
+
   const answer = await generateGroundedAnswer({
     query,
     contexts: topDocuments,
   });
+
+  const normalizedAnswer = String(answer || '').toLowerCase();
+  const answerIsUncertain =
+    !answer ||
+    normalizedAnswer.includes('not enough information') ||
+    normalizedAnswer.includes('cannot answer') ||
+    normalizedAnswer.includes('not provided in the context') ||
+    normalizedAnswer.includes('do not have enough');
+
+  if (answerIsUncertain) {
+    return {
+      found: false,
+      answer: NO_CONFIDENT_ANSWER,
+      sources: topDocuments.map((document) => ({
+        doc_id: document.doc_id,
+        title: document.title,
+        category: document.category,
+        score: Number(document.score.toFixed(2)),
+      })),
+      retrieval_mode: RETRIEVAL_MODE,
+    };
+  }
 
   return {
     found: true,

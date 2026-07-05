@@ -27,14 +27,22 @@ const booleanSchema = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const optionalPhoneSchema = z.preprocess((value) => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  return value;
+}, phoneSchema.optional());
+
 const logCallSchema = z.object({
   timestamp: z.string().trim().min(1).optional(),
-  caller_name: z.string({ required_error: 'caller_name is required.' }).trim().min(1),
-  phone: phoneSchema,
+  caller_name: z.string().trim().min(1).optional().default('Unknown caller'),
+  phone: optionalPhoneSchema,
   customer_id: z.string().trim().optional().default(''),
   claim_id: z.string().trim().optional().default(''),
   call_summary: z.string({ required_error: 'call_summary is required.' }).trim().min(1),
-  sentiment: sentimentSchema,
+  sentiment: sentimentSchema.optional().default('unknown'),
   outcome: outcomeSchema,
   escalated: booleanSchema,
 });

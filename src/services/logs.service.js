@@ -3,15 +3,17 @@ const { normalizePhone } = require('../utils/normalize');
 
 async function saveCallLog(payload) {
   const timestamp = payload.timestamp || new Date().toISOString();
+  const callerName = payload.caller_name || 'Unknown caller';
+  const phone = payload.phone ? normalizePhone(payload.phone) : '';
 
   await appendSheetRow('call_logs', [
     timestamp,
-    payload.caller_name,
-    normalizePhone(payload.phone),
+    callerName,
+    phone,
     payload.customer_id || '',
     payload.claim_id || '',
     payload.call_summary,
-    payload.sentiment,
+    payload.sentiment || 'unknown',
     payload.outcome,
     String(payload.escalated),
   ]);
